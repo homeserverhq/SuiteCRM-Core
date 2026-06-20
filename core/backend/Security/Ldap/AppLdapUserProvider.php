@@ -131,6 +131,17 @@ class AppLdapUserProvider implements UserProviderInterface, PasswordUpgraderInte
     protected function createUser($ldapUser, string $username)
     {
         $extraFields = $ldapUser->getExtraFields() ?? [];
+
+        if (!empty($this->ldapAutoCreateExtraFieldsMap)) {
+            $entry = $ldapUser->getEntry();
+            foreach ($this->ldapAutoCreateExtraFieldsMap as $ldapKey => $fieldKey) {
+                if ($entry->hasAttribute($ldapKey)) {
+                    $values = $entry->getAttribute($ldapKey);
+                    $extraFields[$ldapKey] = is_array($values) ? ($values[0] ?? '') : $values;
+                }
+            }
+        }
+
         $userInfo = $this->mapExtraFields($extraFields);
 
         $this->userHandler->createExternalAuthUser($username, $userInfo);

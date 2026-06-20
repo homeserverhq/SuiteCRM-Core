@@ -54,7 +54,7 @@ $viewdefs['Users']['EditView'] = array(
             array(
                 array(
                     'name'=>'user_name',
-                    'displayParams' => array('required'=>true),
+                    'customCode'=>'{$fields.user_name.value}<input type="hidden" name="user_name" value="{$fields.user_name.value}">',
                     ),
                 'first_name'
             ),
@@ -69,6 +69,17 @@ $viewdefs['Users']['EditView'] = array(
                       ),
                 ),
             array('photo'),
+            array(
+                'custom_code_api_key' => array(
+                    'name' => 'api_key',
+                    'label' => 'LBL_API_KEY',
+                    'customCode' => '
+                        <input type="text" id="api_key" name="api_key" value="{$fields.api_key.value}" readonly="readonly" style="width:300px;">
+                        <input type="button" id="generate_api_key_btn" class="button" value="Generate" onclick="generateApiKey()">
+                        <input type="button" id="copy_api_key_btn" class="button" value="Copy" onclick="copyApiKey()">
+                    ',
+                ),
+            ),
         ),
         'LBL_EMPLOYEE_INFORMATION' => array(
             array(array(

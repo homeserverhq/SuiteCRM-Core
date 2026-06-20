@@ -1,0 +1,333 @@
+name: suitecrm
+
+networks:
+  suitecrm-network:
+    driver: bridge
+  dock-ext-net:
+    name: dock-ext
+    external: true
+  dock-dbs-net:
+    name: dock-dbs
+    external: true
+
+volumes:
+  mariadb-data:
+  suitecrm-uploads:
+  suitecrm-custom:
+  suitecrm-logs:
+  suitecrm-media:
+  suitecrm-extensions:
+  suitecrm-config:
+  suitecrm-legacy-cache:
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: suitecrm-mariadb
+    networks:
+      - suitecrm-network
+      - dock-dbs-net
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - /repos/SuiteCRM-Core/docker/mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${SUITECRM_DB_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${SUITECRM_DB_NAME:-suitecrm}
+      MYSQL_USER: ${SUITECRM_DB_USER:-suitecrm}
+      MYSQL_PASSWORD: ${SUITECRM_DB_PASSWORD:-suitecrm}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --skip-ssl"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    command: ["mariadbd", "--log-bin=mariadb-bin", "--innodb-linux-aio=aio"]
+    restart: unless-stopped
+
+  valkey:
+    image: valkey/valkey:alpine3.23
+    container_name: suitecrm-valkey
+    networks:
+      - suitecrm-network
+    command: >
+      sh -c 'valkey-server
+        --appendonly no
+        --save ""
+        ${SUITECRM_VALKEY_PASSWORD:+--requirepass "${SUITECRM_VALKEY_PASSWORD}"}'
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  ldap:
+    build: /repos/SuiteCRM-Core/docker/ldap/image
+    container_name: suitecrm-ldap
+    networks:
+      - suitecrm-network
+    ports:
+      - "3890:389"
+    environment:
+      LDAP_ORGANISATION: Example Inc
+      LDAP_DOMAIN: example.com
+      LDAP_ADMIN_PASSWORD: admin
+      LDAP_TLS: false
+    healthcheck:
+      test: ["CMD-SHELL", "ldapsearch -x -H ldap://127.0.0.1:389 -b dc=example,dc=com -D cn=admin,dc=example,dc=com -w $${LDAP_ADMIN_PASSWORD} >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  app:
+    build:
+      context: /repos/SuiteCRM-Core
+      dockerfile: docker/php/Dockerfile
+    container_name: suitecrm-app
+    networks:
+      - suitecrm-network
+    volumes:
+      - suitecrm-uploads:/var/www/html/public/legacy/upload
+      - suitecrm-custom:/var/www/html/public/legacy/custom
+      - suitecrm-logs:/var/www/html/logs
+      - suitecrm-media:/var/www/html/public/media
+      - suitecrm-extensions:/var/www/html/extensions
+      - suitecrm-config:/var/www/html/config
+      - suitecrm-legacy-cache:/var/www/html/public/legacy/cache
+    environment:
+      SUITECRM_SITE_URL: ${SUITECRM_SITE_URL:-http://localhost:8040}
+      SUITECRM_APP_SECRET: ${SUITECRM_APP_SECRET:-}
+      SUITECRM_DB_PASSWORD: ${SUITECRM_DB_PASSWORD:-suitecrm}
+      SUITECRM_DB_HOST: ${SUITECRM_DB_HOST:-mariadb}
+      SUITECRM_DB_PORT: ${SUITECRM_DB_PORT:-3306}
+      SUITECRM_DB_NAME: ${SUITECRM_DB_NAME:-suitecrm}
+      SUITECRM_DB_USER: ${SUITECRM_DB_USER:-suitecrm}
+      SUITECRM_DB_ROOT_PASSWORD: ${SUITECRM_DB_ROOT_PASSWORD:-root}
+      SUITECRM_ADMIN_USERNAME: ${SUITECRM_ADMIN_USERNAME:-admin}
+      SUITECRM_ADMIN_PASSWORD: ${SUITECRM_ADMIN_PASSWORD:-admin123}
+      SUITECRM_ADMIN_FIRST_NAME: ${SUITECRM_ADMIN_FIRST_NAME:-Admin}
+      SUITECRM_ADMIN_LAST_NAME: ${SUITECRM_ADMIN_LAST_NAME:-Administrator}
+      SUITECRM_APP_ENV: ${SUITECRM_APP_ENV:-dev}
+      SUITECRM_AUTH_TYPE: ${SUITECRM_AUTH_TYPE:-native}
+      SUITECRM_SITE_NAME: ${SUITECRM_SITE_NAME:-SuiteCRM}
+      SUITECRM_SKIP_WIZARD: ${SUITECRM_SKIP_WIZARD:-true}
+      SUITECRM_TZ: ${SUITECRM_TZ:-America/Chicago}
+      SUITECRM_TRUSTED_PROXIES: ${SUITECRM_TRUSTED_PROXIES:-172.16.0.0/12}
+      SUITECRM_TRUSTED_HOSTS: ${SUITECRM_TRUSTED_HOSTS:-}
+      SUITECRM_MAILER_DSN: ${SUITECRM_MAILER_DSN:-}
+      SUITECRM_VALKEY_DSN: ${SUITECRM_VALKEY_DSN:-redis://valkey:6379/0}
+      SUITECRM_VALKEY_PASSWORD: ${SUITECRM_VALKEY_PASSWORD:-}
+      SUITECRM_LDAP_HOST: ${SUITECRM_LDAP_HOST:-ldap}
+      SUITECRM_LDAP_PORT: ${SUITECRM_LDAP_PORT:-389}
+      SUITECRM_LDAP_ENCRYPTION: ${SUITECRM_LDAP_ENCRYPTION:-none}
+      SUITECRM_LDAP_DN_STRING: ${SUITECRM_LDAP_DN_STRING:-}
+      SUITECRM_LDAP_QUERY_STRING: ${SUITECRM_LDAP_QUERY_STRING:-}
+      SUITECRM_LDAP_SEARCH_DN: ${SUITECRM_LDAP_SEARCH_DN:-}
+      SUITECRM_LDAP_SEARCH_PASSWORD: ${SUITECRM_LDAP_SEARCH_PASSWORD:-}
+      SUITECRM_LDAP_AUTO_CREATE: ${SUITECRM_LDAP_AUTO_CREATE:-disabled}
+      SUITECRM_LDAP_PROVIDER_BASE_DN: ${SUITECRM_LDAP_PROVIDER_BASE_DN:-}
+      SUITECRM_LDAP_PROVIDER_SEARCH_DN: ${SUITECRM_LDAP_PROVIDER_SEARCH_DN:-}
+      SUITECRM_LDAP_PROVIDER_UID_KEY: ${SUITECRM_LDAP_PROVIDER_UID_KEY:-uid}
+      SUITECRM_LDAP_PROVIDER_FILTER: ${SUITECRM_LDAP_PROVIDER_FILTER:-}
+      SUITECRM_LDAP_PROVIDER_DEFAULT_ROLES: ${SUITECRM_LDAP_PROVIDER_DEFAULT_ROLES:-ROLE_USER}
+      SUITECRM_LDAP_GROUP_NAME: ${SUITECRM_LDAP_GROUP_NAME:-primaryusers}
+      SUITECRM_LDAP_GROUP_ATTR: ${SUITECRM_LDAP_GROUP_ATTR:-uniqueMember}
+      SUITECRM_LDAP_GROUP_OBJECTCLASS: ${SUITECRM_LDAP_GROUP_OBJECTCLASS:-groupOfUniqueNames}
+      SUITECRM_LDAP_GROUP_BASE_DN: ${SUITECRM_LDAP_GROUP_BASE_DN:-ou=groups,dc=example,dc=com}
+      SUITECRM_REFERER_HOST: ${SUITECRM_REFERER_HOST:-}
+      SUITECRM_CORS_ALLOW_ORIGIN: ${SUITECRM_CORS_ALLOW_ORIGIN:-}
+      OAUTH2_PRIVATE_KEY: |
+        -----BEGIN PRIVATE KEY-----
+        MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDURPhWv4juNY5A
+        15Jnq77DGADt5yBJAjhfYY/Lohx35fm4pwG4oVWKhHAwwzB787URO9LdeGkUDUmI
+        12vfh1kZ+NLP6nbtG+iMc6ub9yWdKCUs0lR/lFj02rgUdSUGMJ4CW2lmTCxToERi
+        emDTV1ddvcdeid4SMfHvUPxN5eR1tYmGoVogJbEcNFoLIthBVM3rjid7XdUq1pOX
+        35me9SRiwI98n5ZBlrG2rw1wYeMsTRvggrlC9uC9plnj58ZszlFU3aJmClHRG7/Y
+        aONn9zderobM/JKQe5uHmvfoDYuQFlhAquomvmpq09zLczpbmA6I2rNbJO/72dhn
+        n3UBq6/9AgMBAAECggEAXAwIcH2gIEPjCuUwHHqSP0FybbeS/XXUAjBpTZFfrPJy
+        BouNKIX1dRqXF94ccTOuKen6N4WWc1aLs6ZOpeCoV6XZrMVsisdWYUlrejeC/RJC
+        hJw0fhpTNOJ/foeJ5ZRBgJ4pJ24SrrTJ0rZktGCkhwbbpHg+bz9vPSquLg1ps0yZ
+        Zqlu1h/B9Cn2xXGuk1L+Kpiv1tntAAMnf0fNYz8iBuETRrbqcVkwfOlG/64VEeIw
+        nHWqoaplR4bTa+GOdeKz/9dN1oMql2nsOrTjRkmg0LxuJ2ovrV6hLQoIg856VwTN
+        7IgF6bLP9J16LLHlu/5co+LDmnbMP3cmhATKm5xhVQKBgQD/9vzz01Qgwnau6jXR
+        IYh5sx1zjndqNziFbqKd0yyaou111RZdzh3NVxW+RXRXt7/W63v+9gYlklyw5IJ6
+        Z6tC9wHTJqzFoMoQtVV/16305qYhhH2ZQ2oVWbQNyTLzApfjZEqFyLzYNwT9stlP
+        74P4WcR5AvizvW8aRL7RbAXMhwKBgQDUTHGNu3otDjDovXRv0NivAeOGTcG/UAnn
+        egBz0abj+VJ2t/S68suh8Cc9s5IGbwAiusuydeZWGXEbXdhqty4CzezWclU9wmXr
+        YJKcIfTTgRxXKPJbcqW19gXsngCwjgGRvNb891pQBnwSQFXK/CulYf8psgrmK2Ec
+        /6Kc5Z8kWwKBgQCDZdxGosa+JnXcpxjHacpwhxVoW8tLeFuIi9no4R41p8v0wFXC
+        A+xinADqcycdXJOblblKkitnoDH7EOM2SP+u2bRTG7h3n2n7l8rzXNnNLZY9AJGl
+        WukbWrhGl3GTNFKahcKH2RuwdtYWEnjiQxdhJ1vnrzHSuz1Mo9u9EBIOAwKBgQCK
+        oqTgxlXhiEveIKIhxsNJfbVD5hEoyq69D4muGHGgnBcC2dwiHR1nUbl+bH5mXyQ6
+        ibstfhp9jT20flMuVRLh1/HalG0f2IvP6o+zD+WeHMkSDfY+S571NYTm4MNYiFN0
+        BVprdWfvrFxnWsXruUMTS+xiIRdG+XsAgduCE90Z0wKBgE4bfBIUhzGqTnX4BoGT
+        BrZSqIRraQOYz4vPg5jppfSCaKjxoUwIO1dqZQ2dGKCfmtIFSvpZ6hLqR1s1lQgF
+        TdGtNmm+aRtvXI+qloyNI+WEMyD9cS9MDUr1R6AJvmaQKGi3jwOxatlTmfwyFE4t
+        BmX854OFzAuJEi5QODOZiMn9
+        -----END PRIVATE KEY-----
+      OAUTH2_PUBLIC_KEY: |
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1ET4Vr+I7jWOQNeSZ6u+
+        wxgA7ecgSQI4X2GPy6Icd+X5uKcBuKFVioRwMMMwe/O1ETvS3XhpFA1JiNdr34dZ
+        GfjSz+p27RvojHOrm/clnSglLNJUf5RY9Nq4FHUlBjCeAltpZkwsU6BEYnpg01dX
+        Xb3HXoneEjHx71D8TeXkdbWJhqFaICWxHDRaCyLYQVTN644ne13VKtaTl9+ZnvUk
+        YsCPfJ+WQZaxtq8NcGHjLE0b4IK5QvbgvaZZ4+fGbM5RVN2iZgpR0Ru/2GjjZ/c3
+        Xq6GzPySkHubh5r36A2LkBZYQKrqJr5qatPcy3M6W5gOiNqzWyTv+9nYZ591Aauv
+        /QIDAQAB
+        -----END PUBLIC KEY-----
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep php-fpm > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: /repos/SuiteCRM-Core
+      dockerfile: docker/php/Dockerfile
+    container_name: suitecrm-nginx
+    networks:
+      - suitecrm-network
+      - dock-ext-net
+    ports:
+      - "${SUITECRM_PORT:-8040}:80"
+    volumes:
+      - /repos/SuiteCRM-Core/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - suitecrm-legacy-cache:/var/www/html/public/legacy/cache
+    entrypoint: ["nginx", "-g", "daemon off;"]
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+  cron:
+    build:
+      context: /repos/SuiteCRM-Core
+      dockerfile: docker/php/Dockerfile
+    container_name: suitecrm-cron
+    networks:
+      - suitecrm-network
+    volumes:
+      - suitecrm-uploads:/var/www/html/public/legacy/upload
+      - suitecrm-custom:/var/www/html/public/legacy/custom
+      - suitecrm-logs:/var/www/html/logs
+      - suitecrm-media:/var/www/html/public/media
+      - suitecrm-extensions:/var/www/html/extensions
+      - suitecrm-config:/var/www/html/config
+      - suitecrm-legacy-cache:/var/www/html/public/legacy/cache
+    environment:
+      SUITECRM_SITE_URL: ${SUITECRM_SITE_URL:-http://localhost:8040}
+      SUITECRM_APP_SECRET: ${SUITECRM_APP_SECRET:-}
+      SUITECRM_DB_PASSWORD: ${SUITECRM_DB_PASSWORD:-suitecrm}
+      SUITECRM_DB_HOST: ${SUITECRM_DB_HOST:-mariadb}
+      SUITECRM_DB_PORT: ${SUITECRM_DB_PORT:-3306}
+      SUITECRM_DB_NAME: ${SUITECRM_DB_NAME:-suitecrm}
+      SUITECRM_DB_USER: ${SUITECRM_DB_USER:-suitecrm}
+      SUITECRM_ADMIN_USERNAME: ${SUITECRM_ADMIN_USERNAME:-admin}
+      SUITECRM_ADMIN_PASSWORD: ${SUITECRM_ADMIN_PASSWORD:-admin123}
+      SUITECRM_APP_ENV: ${SUITECRM_APP_ENV:-dev}
+      SUITECRM_AUTH_TYPE: ${SUITECRM_AUTH_TYPE:-native}
+      SUITECRM_SITE_NAME: ${SUITECRM_SITE_NAME:-SuiteCRM}
+      SUITECRM_SKIP_WIZARD: ${SUITECRM_SKIP_WIZARD:-true}
+      SUITECRM_TZ: ${SUITECRM_TZ:-America/Chicago}
+      SUITECRM_TRUSTED_PROXIES: ${SUITECRM_TRUSTED_PROXIES:-172.16.0.0/12}
+      SUITECRM_VALKEY_DSN: ${SUITECRM_VALKEY_DSN:-redis://valkey:6379/0}
+      SUITECRM_VALKEY_PASSWORD: ${SUITECRM_VALKEY_PASSWORD:-}
+      SUITECRM_LDAP_HOST: ${SUITECRM_LDAP_HOST:-ldap}
+      SUITECRM_LDAP_PORT: ${SUITECRM_LDAP_PORT:-389}
+      SUITECRM_LDAP_ENCRYPTION: ${SUITECRM_LDAP_ENCRYPTION:-none}
+      SUITECRM_LDAP_DN_STRING: ${SUITECRM_LDAP_DN_STRING:-}
+      SUITECRM_LDAP_QUERY_STRING: ${SUITECRM_LDAP_QUERY_STRING:-}
+      SUITECRM_LDAP_SEARCH_DN: ${SUITECRM_LDAP_SEARCH_DN:-}
+      SUITECRM_LDAP_SEARCH_PASSWORD: ${SUITECRM_LDAP_SEARCH_PASSWORD:-}
+      SUITECRM_LDAP_AUTO_CREATE: ${SUITECRM_LDAP_AUTO_CREATE:-disabled}
+      SUITECRM_LDAP_PROVIDER_BASE_DN: ${SUITECRM_LDAP_PROVIDER_BASE_DN:-}
+      SUITECRM_LDAP_PROVIDER_SEARCH_DN: ${SUITECRM_LDAP_PROVIDER_SEARCH_DN:-}
+      SUITECRM_LDAP_PROVIDER_UID_KEY: ${SUITECRM_LDAP_PROVIDER_UID_KEY:-uid}
+      SUITECRM_LDAP_PROVIDER_FILTER: ${SUITECRM_LDAP_PROVIDER_FILTER:-}
+      SUITECRM_LDAP_PROVIDER_DEFAULT_ROLES: ${SUITECRM_LDAP_PROVIDER_DEFAULT_ROLES:-ROLE_USER}
+      SUITECRM_LDAP_GROUP_NAME: ${SUITECRM_LDAP_GROUP_NAME:-primaryusers}
+      SUITECRM_LDAP_GROUP_ATTR: ${SUITECRM_LDAP_GROUP_ATTR:-uniqueMember}
+      SUITECRM_LDAP_GROUP_OBJECTCLASS: ${SUITECRM_LDAP_GROUP_OBJECTCLASS:-groupOfUniqueNames}
+      SUITECRM_LDAP_GROUP_BASE_DN: ${SUITECRM_LDAP_GROUP_BASE_DN:-ou=groups,dc=example,dc=com}
+      SUITECRM_REFERER_HOST: ${SUITECRM_REFERER_HOST:-}
+      SUITECRM_CORS_ALLOW_ORIGIN: ${SUITECRM_CORS_ALLOW_ORIGIN:-}
+    command: ["cron"]
+    depends_on:
+      app:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: /repos/SuiteCRM-Core
+      dockerfile: docker/php/Dockerfile
+    container_name: suitecrm-worker
+    networks:
+      - suitecrm-network
+    volumes:
+      - suitecrm-uploads:/var/www/html/public/legacy/upload
+      - suitecrm-custom:/var/www/html/public/legacy/custom
+      - suitecrm-logs:/var/www/html/logs
+      - suitecrm-media:/var/www/html/public/media
+      - suitecrm-extensions:/var/www/html/extensions
+      - suitecrm-config:/var/www/html/config
+    environment:
+      SUITECRM_SITE_URL: ${SUITECRM_SITE_URL:-http://localhost:8040}
+      SUITECRM_APP_SECRET: ${SUITECRM_APP_SECRET:-}
+      SUITECRM_DB_PASSWORD: ${SUITECRM_DB_PASSWORD:-suitecrm}
+      SUITECRM_DB_HOST: ${SUITECRM_DB_HOST:-mariadb}
+      SUITECRM_DB_PORT: ${SUITECRM_DB_PORT:-3306}
+      SUITECRM_DB_NAME: ${SUITECRM_DB_NAME:-suitecrm}
+      SUITECRM_DB_USER: ${SUITECRM_DB_USER:-suitecrm}
+      SUITECRM_ADMIN_USERNAME: ${SUITECRM_ADMIN_USERNAME:-admin}
+      SUITECRM_ADMIN_PASSWORD: ${SUITECRM_ADMIN_PASSWORD:-admin123}
+      SUITECRM_APP_ENV: ${SUITECRM_APP_ENV:-dev}
+      SUITECRM_AUTH_TYPE: ${SUITECRM_AUTH_TYPE:-native}
+      SUITECRM_SITE_NAME: ${SUITECRM_SITE_NAME:-SuiteCRM}
+      SUITECRM_SKIP_WIZARD: ${SUITECRM_SKIP_WIZARD:-true}
+      SUITECRM_TZ: ${SUITECRM_TZ:-America/Chicago}
+      SUITECRM_TRUSTED_PROXIES: ${SUITECRM_TRUSTED_PROXIES:-172.16.0.0/12}
+      SUITECRM_VALKEY_DSN: ${SUITECRM_VALKEY_DSN:-redis://valkey:6379/0}
+      SUITECRM_VALKEY_PASSWORD: ${SUITECRM_VALKEY_PASSWORD:-}
+      SUITECRM_LDAP_HOST: ${SUITECRM_LDAP_HOST:-ldap}
+      SUITECRM_LDAP_PORT: ${SUITECRM_LDAP_PORT:-389}
+      SUITECRM_LDAP_ENCRYPTION: ${SUITECRM_LDAP_ENCRYPTION:-none}
+      SUITECRM_LDAP_DN_STRING: ${SUITECRM_LDAP_DN_STRING:-}
+      SUITECRM_LDAP_QUERY_STRING: ${SUITECRM_LDAP_QUERY_STRING:-}
+      SUITECRM_LDAP_SEARCH_DN: ${SUITECRM_LDAP_SEARCH_DN:-}
+      SUITECRM_LDAP_SEARCH_PASSWORD: ${SUITECRM_LDAP_SEARCH_PASSWORD:-}
+      SUITECRM_LDAP_AUTO_CREATE: ${SUITECRM_LDAP_AUTO_CREATE:-disabled}
+      SUITECRM_LDAP_PROVIDER_BASE_DN: ${SUITECRM_LDAP_PROVIDER_BASE_DN:-}
+      SUITECRM_LDAP_PROVIDER_SEARCH_DN: ${SUITECRM_LDAP_PROVIDER_SEARCH_DN:-}
+      SUITECRM_LDAP_PROVIDER_UID_KEY: ${SUITECRM_LDAP_PROVIDER_UID_KEY:-uid}
+      SUITECRM_LDAP_PROVIDER_FILTER: ${SUITECRM_LDAP_PROVIDER_FILTER:-}
+      SUITECRM_LDAP_PROVIDER_DEFAULT_ROLES: ${SUITECRM_LDAP_PROVIDER_DEFAULT_ROLES:-ROLE_USER}
+      SUITECRM_LDAP_GROUP_NAME: ${SUITECRM_LDAP_GROUP_NAME:-primaryusers}
+      SUITECRM_LDAP_GROUP_ATTR: ${SUITECRM_LDAP_GROUP_ATTR:-uniqueMember}
+      SUITECRM_LDAP_GROUP_OBJECTCLASS: ${SUITECRM_LDAP_GROUP_OBJECTCLASS:-groupOfUniqueNames}
+      SUITECRM_LDAP_GROUP_BASE_DN: ${SUITECRM_LDAP_GROUP_BASE_DN:-ou=groups,dc=example,dc=com}
+      SUITECRM_REFERER_HOST: ${SUITECRM_REFERER_HOST:-}
+      SUITECRM_CORS_ALLOW_ORIGIN: ${SUITECRM_CORS_ALLOW_ORIGIN:-}
+    command: ["worker"]
+    depends_on:
+      app:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped

@@ -28,35 +28,20 @@
 
 namespace App\Module\Users\Repository;
 
-use App\Module\users\Entity\User;
+use App\Module\Users\Entity\User;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\NonUniqueResultException;
+use Doctrine\ORM\QueryBuilder;
 use Symfony\Bridge\Doctrine\Security\User\UserLoaderInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 
-/**
- * @method User|null find($id, $lockMode = null, $lockVersion = null)
- * @method User|null findOneBy(array $criteria, array $orderBy = null)
- * @method User[]    findAll()
- * @method User[]    findBy(array $criteria, array $orderBy = null, $limit = null, $offset = null)
- */
 class UserRepository extends EntityRepository implements UserLoaderInterface
 {
-    /**
-     * Loads the user for the given username.
-     *
-     * This method must return null if the user is not found.
-     *
-     * @param string $identifier The username
-     *
-     * @return UserInterface|null
-     * @throws NonUniqueResultException
-     */
     public function loadUserByIdentifier($identifier): ?UserInterface
     {
         return $this->createQueryBuilder('u')
             ->where('u.user_name = :user_name')
-            ->andWhere("u.status = 'active'")
+            ->andWhere("u.status = 'Active'")
             ->andWhere('u.deleted = :deleted')
             ->setParameter('user_name', $identifier)
             ->setParameter('deleted', 0)
@@ -67,5 +52,17 @@ class UserRepository extends EntityRepository implements UserLoaderInterface
     public function loadUserByUsername(string $username): ?UserInterface
     {
         return $this->loadUserByIdentifier($username);
+    }
+
+    public function loadUserByApiKey(string $apiKey): ?UserInterface
+    {
+        return $this->createQueryBuilder('u')
+            ->where('u.apiKey = :apiKey')
+            ->andWhere("u.status = 'Active'")
+            ->andWhere('u.deleted = :deleted')
+            ->setParameter('apiKey', $apiKey)
+            ->setParameter('deleted', 0)
+            ->getQuery()
+            ->getOneOrNullResult();
     }
 }

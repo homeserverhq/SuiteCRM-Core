@@ -28,6 +28,8 @@ return CustomLoader::mergeCustomArray([
 
         $shouldCheckPermissions = OsHelper::getOS() !== OsHelper::OS_WINDOWS;
 
+        $privateKey = getenv('OAUTH2_PRIVATE_KEY') ?: sprintf('file://%s/%s', $baseDir, ApiConfig::OAUTH2_PRIVATE_KEY);
+
 	    $oauth2EncKey = $GLOBALS['sugar_config']['oauth2_encryption_key'] ?? '';
 	    if (empty($oauth2EncKey)) {
 		    $oauth2EncKey = 'SCRM-DEFK';
@@ -47,7 +49,7 @@ return CustomLoader::mergeCustomArray([
             ),
             new ScopeRepository(),
             new CryptKey(
-                sprintf('file://%s/%s', $baseDir, ApiConfig::OAUTH2_PRIVATE_KEY),
+                $privateKey,
                 null,
                 $shouldCheckPermissions
             ),
@@ -97,13 +99,15 @@ return CustomLoader::mergeCustomArray([
 
         $shouldCheckPermissions = OsHelper::getOS() !== OsHelper::OS_WINDOWS;
 
+        $publicKey = getenv('OAUTH2_PUBLIC_KEY') ?: sprintf('file://%s/%s', $baseDir, ApiConfig::OAUTH2_PUBLIC_KEY);
+
         return new ResourceServer(
             new AccessTokenRepository(
                 new AccessTokenEntity(),
                 $container->get(BeanManager::class)
             ),
             new CryptKey(
-                sprintf('file://%s/%s', $baseDir, ApiConfig::OAUTH2_PUBLIC_KEY),
+                $publicKey,
                 null,
                 $shouldCheckPermissions
             )

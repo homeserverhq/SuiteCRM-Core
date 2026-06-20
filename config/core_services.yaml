@@ -195,7 +195,7 @@ services:
 
   App\Module\:
     resource: '../core/modules/*'
-    exclude: '../core/modules/{language,Language,DependencyInjection,Entity,Migrations,Tests,Kernel.php}'
+    exclude: '../core/modules/{language,Language,DependencyInjection,Entity,Migrations,Tests,Kernel.php,Repository}'
 
   # makes classes in extensions/ available to be used as services
   # this creates a service per class whose id is the fully-qualified class name

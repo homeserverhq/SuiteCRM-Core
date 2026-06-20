@@ -1,0 +1,30 @@
+dn: ou=people,dc=example,dc=com
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=example,dc=com
+objectClass: organizationalUnit
+ou: groups
+
+dn: cn=alloweduser,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: alloweduser
+givenName: Alice
+sn: Allowed
+uid: alloweduser
+mail: alloweduser@example.com
+userPassword: allowed123
+
+dn: cn=denieduser,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: denieduser
+givenName: Denny
+sn: Denied
+uid: denieduser
+mail: denieduser@example.com
+userPassword: denied123
+
+dn: cn=primaryusers,ou=groups,dc=example,dc=com
+objectClass: groupOfUniqueNames
+cn: primaryusers
+uniqueMember: cn=alloweduser,ou=people,dc=example,dc=com

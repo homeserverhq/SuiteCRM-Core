@@ -45,46 +45,13 @@ abstract class LegacyHandler
 
     protected const MSG_LEGACY_BOOTSTRAP_FAILED = 'Running legacy entry point failed';
 
-    /**
-     * @var string
-     *
-     */
     protected $projectDir;
-
-    /**
-     * @var string
-     */
     protected $legacyDir;
-
-    /**
-     * @var string
-     */
     protected $legacySessionName;
-
-    /**
-     * @var string
-     */
     protected $defaultSessionName;
-
-    /**
-     * @var LegacyScopeState
-     */
     protected $state;
-
-    /**
-     * @var RequestStack
-     */
     protected $requestStack;
 
-    /**
-     * LegacyHandler constructor.
-     * @param string $projectDir
-     * @param string $legacyDir
-     * @param string $legacySessionName
-     * @param string $defaultSessionName
-     * @param LegacyScopeState $legacyScopeState
-     * @param RequestStack $requestStack
-     */
     public function __construct(
         string           $projectDir,
         string           $legacyDir,
@@ -102,50 +69,36 @@ abstract class LegacyHandler
         $this->requestStack = $requestStack;
     }
 
-    /**
-     * Legacy handler initialization method
-     */
     public function init(): void
     {
-        if (!empty($this->state->getActiveScope())) {
+        $activeScope = $this->state->getActiveScope();
+        if (!empty($activeScope)) {
             return;
         }
-
-        // Set working directory for legacy
         chdir($this->legacyDir);
-
         $this->startSession();
-
-        // force legacy dir
         chdir($this->legacyDir);
-
         $this->state->setActiveScope($this->getHandlerKey());
     }
 
-    /**
-     * Bootstraps legacy suite
-     * @return bool
-     */
     public function runLegacyEntryPoint(): bool
     {
+        $bootstrapped = $this->state->isLegacyBootstrapped();
         if ($this->state->isLegacyBootstrapped()) {
             return true;
         }
 
-        // Set up sugarEntry
         if (!defined('sugarEntry')) {
             define('sugarEntry', true);
         }
 
-        if (!$this->isAppInstalled($this->legacyDir)) {
+        $isInstalled = $this->isAppInstalled($this->legacyDir);
+        if (!$isInstalled) {
             global $installing;
             $installing = true;
         }
 
-        // Load in legacy
-        /* @noinspection PhpIncludeInspection */
         require_once 'include/MVC/preDispatch.php';
-        /* @noinspection PhpIncludeInspection */
         require_once 'include/entryPoint.php';
 
         $this->state->setLegacyBootstrapped(true);
@@ -163,18 +116,13 @@ abstract class LegacyHandler
         $this->projectDir = $projectDir;
     }
 
-    /**
-     * Swap symfony session with legacy suite session
-     * @param string $sessionName
-     * @param array $keysToSync
-     */
     protected function switchSession(string $sessionName, array $keysToSync = []): void
     {
         $carryOver = [];
 
         foreach ($keysToSync as $key) {
             if (!empty($_SESSION[$key])) {
-                $carryOver[$key] = $_SESSION[$key];
+                $carryOver[$key] = @$_SESSION[$key];
             }
         }
 
@@ -182,7 +130,8 @@ abstract class LegacyHandler
         session_name($sessionName);
 
         if (!isset($_COOKIE[$sessionName])) {
-            $_COOKIE[$sessionName] = session_create_id();
+            $newId = session_create_id();
+            $_COOKIE[$sessionName] = $newId;
         }
 
         session_id($_COOKIE[$sessionName]);
@@ -193,37 +142,20 @@ abstract class LegacyHandler
         }
     }
 
-    /**
-     * Get handler key
-     * @return string
-     */
     abstract public function getHandlerKey(): string;
 
-    /**
-     * Start Legacy Suite app
-     * @param string $currentModule
-     * @return void
-     * Based on @see SugarApplication::execute
-     * Not calling:
-     * - insert_charset_header
-     * - setupPrint
-     * - checkHTTPReferer
-     * - controller->execute();
-     * - sugar_cleanup
-     */
     protected function startLegacyApp(string $currentModule = ''): void
     {
+        $legacyStarted = $this->state->isLegacyStarted();
         if ($this->state->isLegacyStarted()) {
             return;
         }
 
-        /* @noinspection PhpIncludeInspection */
         require_once 'include/MVC/SugarApplication.php';
 
         global $sugar_config, $current_user;
 
         $app = new SugarApplication();
-
         $GLOBALS['app'] = $app;
 
         if (!empty($sugar_config['default_module'])) {
@@ -238,8 +170,11 @@ abstract class LegacyHandler
         /** @var SugarController $controller */
         $controller = ControllerFactory::getController($module);
         $app->controller = $controller;
-        // If the entry point is defined to not need auth, then don't authenticate.
-        if (empty($_REQUEST['entryPoint']) || $controller->checkEntryPointRequiresAuth($_REQUEST['entryPoint'])) {
+
+        $entryPoint = $_REQUEST['entryPoint'] ?? '';
+        $requiresAuth = empty($entryPoint) || $controller->checkEntryPointRequiresAuth($_REQUEST['entryPoint']);
+
+        if ($requiresAuth) {
             if (empty($current_user->id)) {
                 $app->loadUser();
             }
@@ -257,9 +192,6 @@ abstract class LegacyHandler
         $this->state->setLegacyStarted(true);
     }
 
-    /**
-     * Load legacy system user
-     */
     protected function loadSystemUser(): void
     {
         /** @var User $current_user */
@@ -269,29 +201,21 @@ abstract class LegacyHandler
             $currentUser = $currentUser->getSystemUser();
             $GLOBALS['current_user'] = $currentUser;
         }
-
     }
 
-    /**
-     * Close the legacy handler
-     */
     public function close(): void
     {
-        if ($this->state->getActiveScope() !== $this->getHandlerKey()) {
+        $activeScope = $this->state->getActiveScope();
+        $handlerKey = $this->getHandlerKey();
+        if ($activeScope !== $handlerKey) {
             return;
         }
-
         if (!empty($this->projectDir)) {
             chdir($this->projectDir);
         }
-
         $this->state->setActiveScope(null);
     }
 
-    /**
-     * @param string $module
-     * @param string|null $record
-     */
     protected function initController(string $module, string $record = null): void
     {
         global $app;
@@ -306,9 +230,6 @@ abstract class LegacyHandler
         $controller->loadBean();
     }
 
-    /**
-     * Disable legacy suite translations
-     */
     protected function disableTranslations(): void
     {
         global $sugar_config, $app_strings;
@@ -322,17 +243,17 @@ abstract class LegacyHandler
         $app_strings = disable_translations($app_strings);
     }
 
-    /**
-     * @return void
-     */
     public function startSession(): void
     {
-        if (session_status() === PHP_SESSION_ACTIVE) {
+        $sts = session_status();
+        if ($sts === PHP_SESSION_ACTIVE) {
             return;
         }
-
+        if ($sts === PHP_SESSION_NONE && session_id() !== '') {
+            return;
+        }
+        session_name($this->legacySessionName);
         require_once 'include/MVC/SugarApplication.php';
-
         $app = new SugarApplication();
         $app->startSession();
     }

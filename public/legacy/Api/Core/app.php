@@ -1,4 +1,6 @@
 <?php
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
+
 // Swagger needs this, but should remove - CORS
 header("Access-Control-Allow-Origin: *");
 header('Access-Control-Allow-Methods: POST, PATCH, GET, OPTIONS, PUT, DELETE');

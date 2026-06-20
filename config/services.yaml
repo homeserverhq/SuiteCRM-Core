@@ -18,6 +18,10 @@ parameters:
   site.url: '%env(SITE_URL)%'
   saml.autocreate.attributes_map: '%env(json:SAML_AUTOCREATE_ATTRIBUTES_MAP)%'
   temporary_file.base_dir: '%env(TEMPORARY_FILE_BASE_DIR)%'
+  ldap.options:
+    host: '%env(LDAP_HOST)%'
+    port: '%env(LDAP_PORT)%'
+    encryption: '%env(LDAP_ENCRYPTION)%'
 
 services:
   Symfony\Component\Ldap\Ldap:
@@ -27,6 +31,20 @@ services:
   Symfony\Component\Ldap\Adapter\ExtLdap\Adapter:
     arguments:
       - '%ldap.options%'
+
+  App\Security\Ldap\AppLdapGroupCheckListener:
+    arguments:
+      $ldap: '@Symfony\Component\Ldap\Ldap'
+      $groupName: '%env(LDAP_GROUP_NAME)%'
+      $groupAttr: '%env(LDAP_GROUP_ATTR)%'
+      $groupObjectClass: '%env(LDAP_GROUP_OBJECTCLASS)%'
+      $groupBaseDn: '%env(LDAP_GROUP_BASE_DN)%'
+      $searchDn: '%env(LDAP_SEARCH_DN)%'
+      $searchPassword: '%env(LDAP_SEARCH_PASSWORD)%'
+      $authType: '%env(AUTH_TYPE)%'
+      $userBaseDn: '%env(LDAP_PROVIDER_BASE_DN)%'
+    tags:
+      - { name: kernel.event_subscriber }
 
 imports:
   - { resource: services/**/*.yaml }

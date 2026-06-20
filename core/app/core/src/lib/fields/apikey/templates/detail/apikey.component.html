@@ -1,0 +1,18 @@
+<input type="text"
+       class="form-control"
+       [value]="field.value"
+       readonly
+       placeholder="No API key generated">
+<button type="button"
+        class="button"
+        (click)="generateKey()"
+        title="Generate new API key">
+    Generate
+</button>
+<button type="button"
+        class="button"
+        (click)="copyKey()"
+        title="Copy API key to clipboard"
+        [disabled]="!field.value">
+    Copy
+</button>

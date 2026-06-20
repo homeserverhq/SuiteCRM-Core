@@ -1,4 +1,7 @@
 parameters:
   ldap.autocreate.extra_fields_map:
+    givenName: first_name
+    sn: last_name
+    mail: email1
 
   ldap.extra_fields: [ ]

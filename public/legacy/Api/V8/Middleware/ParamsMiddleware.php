@@ -74,13 +74,24 @@ class ParamsMiddleware
      */
     protected function setCurrentUserGlobal(Request $request)
     {
-        $oauth2Token = $this->beanManager->newBeanSafe('OAuth2Tokens');
+        $userId = $request->getAttribute('oauth_user_id');
+        $oauthAccessTokenId = $request->getAttribute('oauth_access_token_id');
 
-        $oauth2Token->retrieve_by_string_fields(
-            ['access_token' => $request->getAttribute('oauth_access_token_id')]
-        );
+        if (!empty($oauthAccessTokenId)) {
+            $oauth2Token = $this->beanManager->newBeanSafe('OAuth2Tokens');
 
-        $currentUser = $this->beanManager->getBeanSafe('Users', $oauth2Token->assigned_user_id);
+            $oauth2Token->retrieve_by_string_fields(
+                ['access_token' => $oauthAccessTokenId]
+            );
+
+            $userId = $oauth2Token->assigned_user_id;
+        }
+
+        if (empty($userId)) {
+            throw new RuntimeException('Not found');
+        }
+
+        $currentUser = $this->beanManager->getBeanSafe('Users', $userId);
 
         if (!$currentUser->isEnabled()) {
             throw new RuntimeException('Not found');

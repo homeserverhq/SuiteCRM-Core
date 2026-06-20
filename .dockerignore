@@ -1,0 +1,8 @@
+node_modules/
+vendor/
+.git/
+.gitignore
+*.md
+.dockerignore
+.env.local
+.env.*.local

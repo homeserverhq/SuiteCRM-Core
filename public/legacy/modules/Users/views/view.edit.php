@@ -288,6 +288,15 @@ EOD
 
         $this->ss->assign('CURRENT_USER', $isCurrentUser);
 
+        echo '<script>
+$(function() {
+    $("#EditView").submit(function() {
+        $("#EditView input[name=\"user_name\"]").remove();
+        return true;
+    });
+});
+</script>';
+
 
         require_once('modules/Emails/EmailUI.php');
         $efocus = BeanFactory::newBean('Emails');

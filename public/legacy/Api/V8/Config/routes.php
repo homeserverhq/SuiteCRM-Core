@@ -8,6 +8,7 @@ use League\OAuth2\Server\Middleware\AuthorizationServerMiddleware;
 use League\OAuth2\Server\Middleware\ResourceServerMiddleware;
 use League\OAuth2\Server\ResourceServer;
 use Api\Core\Loader\CustomLoader;
+use Api\V8\Middleware\ApiKeyAuthMiddleware;
 
 $app->group('', function () use ($app) {
     /**
@@ -128,5 +129,5 @@ $app->group('', function () use ($app) {
         $app->group('/custom', function () use ($app) {
             $app = CustomLoader::loadCustomRoutes($app);
         });
-    })->add(new ResourceServerMiddleware($app->getContainer()->get(ResourceServer::class)));
+    })->add(new ApiKeyAuthMiddleware($app->getContainer()->get(ResourceServer::class), $app->getContainer()->get(\Api\V8\BeanDecorator\BeanManager::class)));
 });

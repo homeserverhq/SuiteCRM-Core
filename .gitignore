@@ -68,6 +68,12 @@ composer.phar
 # htacess
 /.htaccess
 
+# Python
+__pycache__/
+*.pyc
+.yarn/
+mcp/test-report.md
+
 # SASS
 /public/legacy/themes/suite8/css/Dawn/style.css
 /public/legacy/themes/suite8/css/Noon/style.css

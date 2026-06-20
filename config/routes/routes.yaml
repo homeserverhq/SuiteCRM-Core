@@ -21,3 +21,8 @@ saml_logout:
 
 app_2fa_check:
   path: /2fa_check
+
+api_key_generate:
+  path: /api/key/generate
+  controller: App\Security\Controller\ApiKeyController::generate
+  methods: ['POST']

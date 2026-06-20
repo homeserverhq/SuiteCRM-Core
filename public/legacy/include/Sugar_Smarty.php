@@ -98,6 +98,7 @@ class Sugar_Smarty extends Smarty
 
         $this->registerPHPFunctions([
             'count',
+            'file_exists',
             'intval',
             'is_string',
             'key',

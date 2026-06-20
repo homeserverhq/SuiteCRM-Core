@@ -626,6 +626,10 @@ class User extends Person implements EmailInterface
            throw new RuntimeException('Not authorized');
         }
 
+        if (!empty($this->id) && !empty($this->fetched_row['user_name'])) {
+            $this->user_name = $this->fetched_row['user_name'];
+        }
+
         $msg = '';
 
         $isUpdate = $this->isUpdate();

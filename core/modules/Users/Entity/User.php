@@ -40,6 +40,7 @@ use Scheb\TwoFactorBundle\Model\BackupCodeInterface;
 use Scheb\TwoFactorBundle\Model\Totp\TotpConfiguration;
 use Scheb\TwoFactorBundle\Model\Totp\TotpConfigurationInterface;
 use Scheb\TwoFactorBundle\Model\Totp\TwoFactorInterface;
+use Doctrine\ORM\Event\PreUpdateEventArgs;
 use Symfony\Component\Security\Core\User\EquatableInterface;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
@@ -54,6 +55,7 @@ use Symfony\Component\Security\Core\User\UserInterface;
     ]
 )]
 #[ORM\Entity(repositoryClass: UserRepository::class)]
+#[ORM\HasLifecycleCallbacks]
 #[ORM\Table(name: "users")]
 #[ORM\Index(
     columns: ["user_name", "is_group", "status", "last_name", "first_name", "id"],
@@ -678,6 +680,31 @@ class User implements UserInterface, EquatableInterface, PasswordAuthenticatedUs
     )]
     private ?array $backupCodes = [];
 
+    #[ApiProperty(
+        openapiContext: [
+            'type' => 'string',
+            'description' => 'API key for programmatic access',
+        ]
+    )]
+    #[ORM\Column(
+        name: "api_key",
+        type: "string",
+        length: 64,
+        nullable: true,
+    )]
+    private ?string $apiKey;
+
+    public function getApiKey(): ?string
+    {
+        return $this->apiKey ?? null;
+    }
+
+    public function setApiKey(?string $apiKey): self
+    {
+        $this->apiKey = $apiKey;
+        return $this;
+    }
+
     /**
      * @see UserInterface
      */
@@ -1215,10 +1242,6 @@ class User implements UserInterface, EquatableInterface, PasswordAuthenticatedUs
             return false;
         }
 
-        if ($this->userHash !== $user->getPassword()) {
-            return false;
-        }
-
         if ($this->user_name !== $user->getUsername()) {
             return false;
         }
@@ -1275,6 +1298,14 @@ class User implements UserInterface, EquatableInterface, PasswordAuthenticatedUs
     public function getUserIdentifier(): string
     {
         return $this->getUserName();
+    }
+
+    #[ORM\PreUpdate]
+    public function preventUsernameChange(PreUpdateEventArgs $args): void
+    {
+        if ($args->hasChangedField('user_name')) {
+            $args->setNewValue('user_name', $args->getOldValue('user_name'));
+        }
     }
 
     public function isTotpAuthenticationEnabled(): bool

@@ -102,6 +102,11 @@ class SecurityController extends AbstractController
         $this->cacheManagerHandler = $cacheManagerHandler;
     }
 
+    /**
+     * @param AuthenticationUtils $authenticationUtils
+     * @param User|null $user
+     * @return JsonResponse
+     */
     #[Route('/login', name: 'app_login', methods: ["GET", "POST"])]
     public function login(AuthenticationUtils $authenticationUtils, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -110,7 +115,8 @@ class SecurityController extends AbstractController
         $isAppInstallerLocked = $this->authentication->getAppInstallerLockStatus();
         $appStatus = [
             'installed' => $isAppInstalled,
-            'locked' => $isAppInstallerLocked
+            'locked' => $isAppInstallerLocked,
+            'loginWizardCompleted' => true
         ];
 
         if ($error) {
@@ -129,13 +135,14 @@ class SecurityController extends AbstractController
 
         $data = $this->getResponseData($user, $appStatus);
 
+        $data['login_success'] = true;
+
         $needsRedirect = $this->authentication->needsRedirect($user);
         if (!empty($needsRedirect)) {
             $data['redirect'] = $needsRedirect;
         }
 
         $data['user'] = $user->getUserIdentifier();
-
         return $this->json($data, Response::HTTP_OK);
     }
 
@@ -144,7 +151,7 @@ class SecurityController extends AbstractController
      * @throws Exception
      */
     #[Route('/2fa/enable', name: 'app_2fa_enable', methods: ["GET", "POST"])]
-    #[isGranted('IS_AUTHENTICATED_FULLY')]
+    #[IsGranted('IS_AUTHENTICATED_FULLY')]
     public function enable2fa(#[CurrentUser] ?User $user, TotpAuthenticatorInterface $totpAuthenticator): Response
     {
         $secret = $totpAuthenticator->generateSecret();
@@ -166,36 +173,34 @@ class SecurityController extends AbstractController
             'svg' => $this->displayQRCode($qrCodeUrl),
             'secret' => $secret,
         ];
-
         return new Response(json_encode($response), Response::HTTP_OK);
     }
 
     #[Route('/2fa/disable', name: 'app_2fa_disable', methods: ["GET"])]
     public function disable2fa(#[CurrentUser] ?User $user, TotpAuthenticatorInterface $totpAuthenticator): Response
     {
-        $id = $user->getId();
-
-        $this->userHandler->setUserPreference('is_two_factor_enabled', false);
         $user->setTotpSecret(null);
-        $user->setBackupCodes(null);
 
         $this->preparedStatementHandler->update(
-            'UPDATE users SET totp_secret = NULL, is_totp_enabled = 0, backup_codes = NULL WHERE id = :id',
-            ['id' => $id],
+            'UPDATE users SET totp_secret = NULL WHERE id = :id',
+            ['id' => $user->getId()],
             [['param' => 'id', 'type' => 'string']]
         );
 
+        $this->entityManager->flush();
+
         $this->cacheManagerHandler->markAsNeedsUpdate('app-metadata-user-preferences-' . $user->getId());
 
-        $response = [
-            'two_factor_disabled' => true
-        ];
-
-        return new Response(json_encode($response), Response::HTTP_OK);
+        return new Response(json_encode(['two_factor_disabled' => true]), Response::HTTP_OK);
     }
 
     #[Route('/2fa/enable-finalize', name: 'app_2fa_enable_finalize', methods: ["GET", "POST"])]
-    public function enableFinalize2fa(#[CurrentUser] ?User $user, Security $security, Request $request, TotpAuthenticatorInterface $totpAuthenticator): Response
+    #[IsGranted('IS_AUTHENTICATED_FULLY')]
+    public function enable2faFinalize(
+        Request $request,
+        #[CurrentUser] ?User $user,
+        TotpAuthenticatorInterface $totpAuthenticator
+    ): Response
     {
         $auth_code = $request->getPayload()->get('auth_code') ?? '';
 
@@ -213,88 +218,104 @@ class SecurityController extends AbstractController
         $this->cacheManagerHandler->markAsNeedsUpdate('app-metadata-user-preferences-' . $user->getId());
 
         $response = ['two_factor_setup_complete' => $correctCode];
-
         return new Response(json_encode($response), Response::HTTP_OK);
     }
 
     #[Route('/logout', name: 'app_logout', methods: ["GET", "POST"])]
     public function logout(): void
     {
+        // throw will be intercepted by logout key
         throw new RuntimeException('This will be intercepted by the logout key');
     }
 
     #[Route('/session-status', name: 'app_session_status', methods: ["GET"])]
     public function sessionStatus(Security $security): JsonResponse
     {
-        $isAppInstalled = $this->authentication->getAppInstallStatus();
-        $isAppInstallerLocked = $this->authentication->getAppInstallerLockStatus();
+        try {
+            $isAppInstalled = $this->authentication->getAppInstallStatus();
+        } catch (\Throwable $e) {
+            $isAppInstalled = false;
+        }
+        try {
+            $isAppInstallerLocked = $this->authentication->getAppInstallerLockStatus();
+        } catch (\Throwable $e) {
+            $isAppInstallerLocked = false;
+        }
         $appStatus = [
             'installed' => $isAppInstalled,
-            'locked' => $isAppInstallerLocked
+            'locked' => $isAppInstallerLocked,
+            'loginWizardCompleted' => true
         ];
-
         if (!$isAppInstalled) {
             $response = new JsonResponse(['appStatus' => $appStatus], Response::HTTP_OK);
             $response->headers->clearCookie('XSRF-TOKEN');
             $this->requestStack->getSession()->invalidate();
             $this->requestStack->getSession()->start();
-
             return $response;
         }
-
-        $isActive = $this->authentication->checkSession();
-
+        try {
+            $isActive = $this->authentication->checkSession();
+        } catch (\Throwable $e) {
+            $isActive = false;
+        }
         if ($isActive !== true) {
             $response = new JsonResponse(['active' => false, 'appStatus' => $appStatus], Response::HTTP_OK);
             $this->requestStack->getSession()->invalidate();
             $this->requestStack->getSession()->start();
             $this->authentication->initLegacySystemSession();
-
             return $response;
         }
-
-        $user = $security->getUser();
+        try {
+            $user = $security->getUser();
+        } catch (\Throwable $e) {
+            $user = null;
+        }
         if ($user === null) {
             $response = new JsonResponse(['active' => false, 'appStatus' => $appStatus], Response::HTTP_OK);
-            $this->requestStack->getSession()->invalidate();
-            $this->requestStack->getSession()->start();
-
             return $response;
         }
-
-        $isUserActive = $this->authentication->isUserActive();
+        try {
+            $isUserActive = $this->authentication->isUserActive();
+        } catch (\Throwable $e) {
+            $isUserActive = false;
+        }
         if ($isUserActive !== true) {
             $response = new JsonResponse(['active' => false, 'appStatus' => $appStatus], Response::HTTP_OK);
-            $this->requestStack->getSession()->invalidate();
-            $this->requestStack->getSession()->start();
-
             return $response;
         }
-
-        $isLoginWizardCompleteStatus = $this->authentication->getLoginWizardCompletedStatus();
-
+        try {
+            $isLoginWizardCompleteStatus = $this->authentication->getLoginWizardCompletedStatus();
+        } catch (\Throwable $e) {
+            $isLoginWizardCompleteStatus = false;
+        }
         if ($isLoginWizardCompleteStatus) {
             $appStatus['loginWizardCompleted'] = true;
         } else {
             $appStatus['loginWizardCompleted'] = false;
         }
-
-        $data = $this->getResponseData($user, $appStatus);
-
+        try {
+            $data = $this->getResponseData($user, $appStatus);
+        } catch (\Throwable $e) {
+            $response = new JsonResponse(['active' => false, 'appStatus' => $appStatus], Response::HTTP_INTERNAL_SERVER_ERROR);
+            return $response;
+        }
         if (!isset($data['redirect'])){
-            $needsRedirect = $this->authentication->needsRedirect($user);
-            if (!empty($needsRedirect)) {
-                $data['redirect'] = $needsRedirect;
+            try {
+                $needsRedirect = $this->authentication->needsRedirect($user);
+                if (!empty($needsRedirect)) {
+                    $data['redirect'] = $needsRedirect;
+                }
+            } catch (\Throwable $e) {
             }
         }
-
         return new JsonResponse($data, Response::HTTP_OK);
     }
 
     #[Route('/auth/login', name: 'native_auth_login', methods: ["GET", "POST"])]
     public function nativeAuthLogin(AuthenticationUtils $authenticationUtils, #[CurrentUser] ?User $user): JsonResponse
     {
-        return $this->login($authenticationUtils, $user);
+        $result = $this->login($authenticationUtils, $user);
+        return $result;
     }
 
     #[Route('/auth/logout', name: 'native_auth_logout', methods: ["GET", "POST"])]
@@ -306,63 +327,50 @@ class SecurityController extends AbstractController
     #[Route('/auth/session-status', name: 'native_auth_session_status', methods: ["GET"])]
     public function nativeAuthSessionStatus(Security $security): JsonResponse
     {
-        return $this->sessionStatus($security);
+        $result = $this->sessionStatus($security);
+        return $result;
     }
 
     #[Route('/auth/2fa_check', name: 'native_auth_2fa_check', methods: ["GET", "POST"])]
     public function nativeCheckTwoFactorCode(Request $request): Response
     {
-        return $this->redirectToRoute('app_2fa_check', $request->query->all());
+        $result = $this->redirectToRoute('app_2fa_check', $request->query->all());
+        return $result;
     }
 
     /**
-     * @param UserInterface $user
-     * @param array $appStatus
+     * @param User $user
+     * @param $appStatus
      * @return array
      */
-    private function getResponseData(UserInterface $user, array $appStatus): array
+    private function getResponseData(User $user, $appStatus): array
     {
-        $id = $user->getId();
-        $firstName = $user->getFirstName();
-        $lastName = $user->getLastName();
-        $userName = $user->getUsername();
-
-        if ($user->isTotpAuthenticationEnabled()) {
-            return [
-                'appStatus' => $appStatus,
-                'active' => true,
-                'id' => $id,
-                'firstName' => $firstName,
-                'lastName' => $lastName,
-                'userName' => $userName,
-                'two_factor_complete' => 'false'
-            ];
-        }
-
-        return [
+        $result = [
             'appStatus' => $appStatus,
             'active' => true,
-            'id' => $id,
-            'firstName' => $firstName,
-            'lastName' => $lastName,
-            'userName' => $userName
+            'id' => $user->getId(),
+            'firstName' => $user->getFirstName(),
+            'lastName' => $user->getLastName(),
+            'userName' => $user->getUserIdentifier()
         ];
+        return $result;
     }
 
-    private function displayQrCode(string $qrCodeContent): string
+    private function displayQRCode(string $qrCodeUrl): string
     {
-        // ErrorCorrectionLevelHigh
-        $result = Builder::create()
-            ->writer(new SvgWriter())
-            ->writerOptions(['exclude_xml_declaration' => true])
-            ->data($qrCodeContent)
-            ->encoding(new Encoding('UTF-8'))
-            ->errorCorrectionLevel(ErrorCorrectionLevel::High)
-            ->size(200)
-            ->margin(0)
-            ->roundBlockSizeMode(RoundBlockSizeMode::Margin)
-            ->build();
-
+        $builder = new Builder(
+            writer: new SvgWriter(),
+            writerOptions: [],
+            validateResult: false,
+            data: $qrCodeUrl,
+            encoding: new Encoding('UTF-8'),
+            errorCorrectionLevel: ErrorCorrectionLevel::Medium,
+            size: 200,
+            margin: 0,
+            roundBlockSizeMode: RoundBlockSizeMode::Margin,
+        );
+        $result = $builder->build();
         return $result->getString();
     }
+
 }

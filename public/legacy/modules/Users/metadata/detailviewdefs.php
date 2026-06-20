@@ -102,6 +102,35 @@ $viewdefs['Users']['DetailView'] = array(
                         array(
                             0 => 'photo',
                         ),
+                    3 =>
+                        array(
+                            0 =>
+                                array(
+                                    'name' => 'api_key',
+                                    'label' => 'LBL_API_KEY',
+                                    'customCode' => '
+                                        <input type="text" id="api_key" value="{$fields.api_key.value}" readonly="readonly" style="width:300px;">
+                                        <input type="button" id="copy_api_key_btn" class="button" value="Copy" onclick="copyApiKey()">
+                                        <input type="button" id="generate_api_key_btn" class="button" value="Generate" onclick="generateApiKey()">
+                                        <script>
+                                        function copyApiKey() {
+                                            var keyField = document.getElementById("api_key");
+                                            if (keyField && keyField.value) {
+                                                keyField.select();
+                                                document.execCommand("copy");
+                                            }
+                                        }
+                                        function generateApiKey() {
+                                            if (!confirm("Generate a new API key? The old key will stop working after you save your profile.")) return;
+                                            fetch("index.php?module=Users&action=GenerateApiKey")
+                                                .then(function(r) { return r.json(); })
+                                                .then(function(d) { if(d.api_key) { keyField.value = d.api_key; } });
+                                        }
+                                        var keyField = document.getElementById("api_key");
+                                        </script>
+                                    ',
+                                ),
+                        ),
                 ),
             'LBL_EMPLOYEE_INFORMATION' =>
                 array(

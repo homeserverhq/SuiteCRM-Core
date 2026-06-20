@@ -98,13 +98,16 @@ class UserService
      */
     public function getCurrentUser(Request $request)
     {
-        $oauth2Token = $this->beanManager->newBeanSafe('OAuth2Tokens');
+        $userId = $request->getAttribute('oauth_user_id');
+        if (empty($userId)) {
+            $oauth2Token = $this->beanManager->newBeanSafe('OAuth2Tokens');
+            $oauth2Token->retrieve_by_string_fields(
+                ['access_token' => $request->getAttribute('oauth_access_token_id')]
+            );
+            $userId = $oauth2Token->assigned_user_id;
+        }
 
-        $oauth2Token->retrieve_by_string_fields(
-            ['access_token' => $request->getAttribute('oauth_access_token_id')]
-        );
-
-        $currentUser = $this->beanManager->getBeanSafe('Users', $oauth2Token->assigned_user_id);
+        $currentUser = $this->beanManager->getBeanSafe('Users', $userId);
 
         if (!$currentUser->isEnabled()) {
             throw new RuntimeException('Not found');

@@ -623,7 +623,10 @@ class SugarTheme
         $html = '
             <!-- qtip & suggestion box -->
             <link rel="stylesheet" type="text/css" href="include/javascript/qtip/jquery.qtip.min.css" />';
-        $html .= '<link rel="stylesheet" type="text/css" href="'.$this->getCSSURL('yui.css').'" />';
+        $yuiCssUrl = $this->getCSSURL('yui.css');
+        if ($yuiCssUrl) {
+            $html .= '<link rel="stylesheet" type="text/css" href="'.$yuiCssUrl.'" />';
+        }
         $html .= '<link rel="stylesheet" type="text/css" href="include/javascript/jquery/themes/base/jquery.ui.all.css" />';
 
         // sprites
@@ -672,7 +675,10 @@ class SugarTheme
         }
 
 
-        $html .= '<link rel="stylesheet" type="text/css" href="'.$this->getCSSURL('style.css').'" />';
+        $styleCssUrl = $this->getCSSURL('style.css');
+        if ($styleCssUrl) {
+            $html .= '<link rel="stylesheet" type="text/css" href="'.$styleCssUrl.'" />';
+        }
         return $html;
     }
 
@@ -1002,6 +1008,7 @@ EOHTML;
      */
     public function getCSSURL($cssFileName, $returnURL = true)
     {
+        $originalFileName = $cssFileName;
         if (preg_match('/.css$/', $cssFileName)) {
             global $current_user;
             if (method_exists($current_user, 'getSubTheme')) {
@@ -1040,8 +1047,28 @@ EOHTML;
             $cssFileContents .= file_get_contents('custom/'.$fullFileName);
         }
         if (empty($cssFileContents)) {
-            $GLOBALS['log']->warn("CSS File $cssFileName not found");
-            return false;
+            // Retry without sub-theme prefix if one was added
+            if (isset($subTheme) && !empty($subTheme) && $originalFileName !== $cssFileName) {
+                $cssFileName = $originalFileName;
+                $defaultFileName = $this->getDefaultCSSPath().'/'.$cssFileName;
+                $fullFileName = $this->getCSSPath().'/'.$cssFileName;
+                if (is_file($defaultFileName)) {
+                    $cssFileContents .= file_get_contents($defaultFileName);
+                }
+                if (is_file('custom/'.$defaultFileName)) {
+                    $cssFileContents .= file_get_contents('custom/'.$defaultFileName);
+                }
+                if (is_file($fullFileName)) {
+                    $cssFileContents .= file_get_contents($fullFileName);
+                }
+                if (is_file('custom/'.$fullFileName)) {
+                    $cssFileContents .= file_get_contents('custom/'.$fullFileName);
+                }
+            }
+            if (empty($cssFileContents)) {
+                $GLOBALS['log']->warn("CSS File $originalFileName not found");
+                return false;
+            }
         }
 
         // fix any image references that may be defined in css files

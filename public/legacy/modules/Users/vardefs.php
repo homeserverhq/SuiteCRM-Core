@@ -768,7 +768,23 @@ $dictionary['User'] = array(
         'backup_codes' => array(
             'name' => 'backup_codes',
             'type' => 'text'
-        )
+        ),
+        'api_key' => array(
+            'name' => 'api_key',
+            'vname' => 'LBL_API_KEY',
+            'type' => 'varchar',
+            'len' => '64',
+            'reportable' => false,
+            'importable' => 'false',
+            'studio' => array(
+                'listview' => false,
+                'searchview' => false,
+                'editview' => false,
+                'detailview' => false,
+                'quickcreate' => false,
+            ),
+            'api-visible' => true,
+        ),
     ),
     'indices' => array(
         array(

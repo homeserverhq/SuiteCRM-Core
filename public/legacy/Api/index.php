@@ -1,5 +1,7 @@
 <?php
 
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
+
 global $legacyRoute;
 
 if (isset($legacyRoute['script-name'], $legacyRoute['request-uri'])) {

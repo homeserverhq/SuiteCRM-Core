@@ -43,36 +43,18 @@ class Authentication extends LegacyHandler
 
     public const HANDLER_KEY = 'authentication';
     protected $config;
-    /**
-     * @var array
-     */
     private $systemSettings;
-
-    /**
-     * @var UserHandler
-     */
     private $userHandler;
 
-    /**
-     * LegacyHandler constructor.
-     * @param string $projectDir
-     * @param string $legacyDir
-     * @param string $legacySessionName
-     * @param string $defaultSessionName
-     * @param LegacyScopeState $legacyScopeState
-     * @param RequestStack $session
-     * @param array $systemSettings
-     * @param UserHandler $userHandler
-     */
     public function __construct(
-        string $projectDir,
-        string $legacyDir,
-        string $legacySessionName,
-        string $defaultSessionName,
+        string           $projectDir,
+        string           $legacyDir,
+        string           $legacySessionName,
+        string           $defaultSessionName,
         LegacyScopeState $legacyScopeState,
-        RequestStack $session,
-        array $systemSettings,
-        UserHandler $userHandler
+        RequestStack     $session,
+        array            $systemSettings,
+        UserHandler      $userHandler
     ) {
         parent::__construct(
             $projectDir,
@@ -86,33 +68,18 @@ class Authentication extends LegacyHandler
         $this->userHandler = $userHandler;
     }
 
-    /**
-     * @inheritDoc
-     */
     public function getHandlerKey(): string
     {
-        return self::HANDLER_KEY;
+        $key = self::HANDLER_KEY;
+        return $key;
     }
 
-    /**
-     * Set the config
-     *
-     * @param $config
-     * @return $this
-     */
     public function setConfig($config): self
     {
         $this->config = $config;
-
         return $this;
     }
 
-    /**
-     * Is current user admin
-     *
-     * @param UserInterface $user
-     * @return array
-     */
     public function needsRedirect(UserInterface $user): array
     {
         $this->init();
@@ -125,7 +92,8 @@ class Authentication extends LegacyHandler
 
         if (empty($ut) || empty($timezone)) {
             $this->close();
-            return $this->systemSettings['setup_wizard_route'] ?? ['route' => 'users/wizard'];
+            $result = $this->systemSettings['setup_wizard_route'] ?? ['route' => 'users/wizard'];
+            return $result;
         }
 
         /* @noinspection PhpIncludeInspection */
@@ -133,48 +101,27 @@ class Authentication extends LegacyHandler
 
         if (hasPasswordExpired($user->getUsername())) {
             $this->close();
-
-            return [
+            $result = [
                 'route' => 'users/ChangePassword',
                 'queryParams' => ['record' => $current_user->id]
             ];
+            return $result;
         }
 
         $this->close();
-
         return [];
     }
 
-    /**
-     * Check if user completed login wizard
-     * @return bool
-     */
     public function getLoginWizardCompletedStatus(): bool
     {
-
         $this->init();
-
         $user = $this->userHandler->getCurrentUser();
-
         $ut = $user->getPreference('ut') ?? '';
-
         $this->close();
-
-        if (empty($ut)) {
-            return false;
-        }
-
-        return true;
+        $result = !empty($ut);
+        return $result;
     }
 
-
-    /**
-     * Init legacy user session
-     *
-     * @param $username
-     *
-     * @return bool
-     */
     public function initLegacyUserSession($username): bool
     {
         $this->init();
@@ -205,18 +152,12 @@ class Authentication extends LegacyHandler
         return $result;
     }
 
-    /**
-     * Get auth controller
-     * @return AuthenticationController
-     */
     protected function getAuthenticationController(): AuthenticationController
     {
-        return new AuthenticationController();
+        $controller = new AuthenticationController();
+        return $controller;
     }
 
-    /**
-     * Legacy logout
-     */
     public function logout(): void
     {
         $this->init();
@@ -228,10 +169,6 @@ class Authentication extends LegacyHandler
         $this->close();
     }
 
-    /**
-     * Init new legacy session cookie
-     * @return void
-     */
     public function initLegacySystemSession(): void
     {
         $this->init();
@@ -239,75 +176,40 @@ class Authentication extends LegacyHandler
         $this->close();
     }
 
-    /**
-     * Check if legacy suite session is active
-     * @return bool
-     */
     public function checkSession(): bool
     {
         $this->init();
-
         $authController = $this->getAuthenticationController();
-
         $result = $authController->checkSession();
-
         $this->close();
-
         return $result;
     }
 
-    /**
-     * Check if user is active
-     * @return bool
-     */
     public function isUserActive(): bool
     {
         $this->init();
-
         $authController = $this->getAuthenticationController();
-
         $result = $authController->isUserActive();
-
         $this->close();
-
         return $result;
     }
 
-    /**
-     * Check if suite app is installed
-     * @return bool
-     */
     public function getAppInstallStatus(): bool
     {
         $this->init();
-
         $result = $this->isAppInstalled($this->legacyDir);
-
         $this->close();
-
         return $result;
     }
 
-    /**
-     * Check if suite app is installed but locked
-     * @return bool
-     */
     public function getAppInstallerLockStatus(): bool
     {
         $this->init();
-
         $result = $this->isAppInstallerLocked($this->legacyDir);
-
         $this->close();
-
         return $result;
     }
 
-    /**
-     * @param string $module
-     * @param string $key
-     * @return void
-     */
     public function callLegacyHooks(string $module, string $key): void
     {
         $this->init();
@@ -318,18 +220,13 @@ class Authentication extends LegacyHandler
         $this->close();
     }
 
-    /**
-     * @param string $key
-     * @return void
-     */
     public function callLegacyUserHooks(string $key): void
     {
         $this->init();
         $this->startLegacyApp();
 
-        //call business logic hook
         if (isset($GLOBALS['current_user'])) {
-             $GLOBALS['current_user']->call_custom_logic($key);
+            $GLOBALS['current_user']->call_custom_logic($key);
         }
 
         $this->close();

@@ -28,6 +28,7 @@
 namespace Symfony\Component\DependencyInjection\Loader\Configurator;
 
 use App\Module\Users\Entity\User;
+use App\Security\ApiKeyAuthenticator;
 use App\Security\Ldap\AppLdapUserProvider;
 use App\Security\Saml\AppSamlAuthenticator;
 use Symfony\Component\DependencyInjection\Container;
@@ -117,11 +118,20 @@ return static function (ContainerConfigurator $containerConfig) {
     $containerConfig->parameters()->set('auth.session-expired.redirect', false);
     $containerConfig->parameters()->set('auth.session-expired.path', 'Login');
 
+    // Register API Key authenticator service (used in all auth modes)
+    $services = $containerConfig->services();
+    $services->set('app.api_key_authenticator')
+        ->class(ApiKeyAuthenticator::class)
+        ->args([new Reference('doctrine.orm.entity_manager')]);
+
     if ($authType === 'native') {
         $containerConfig->extension('security', [
             'firewalls' => array_merge_recursive($baseFirewall, [
                 'main' => [
                     'stateless' => false,
+                    'custom_authenticators' => [
+                        'app.api_key_authenticator',
+                    ],
                     'json_login' => [
                         'check_path' => 'app_login',
                         'success_handler' => 'api_success_handler'
@@ -221,6 +231,9 @@ return static function (ContainerConfigurator $containerConfig) {
         $containerConfig->extension('security', [
             'firewalls' => array_merge_recursive($baseFirewall, [
                 'main' => [
+                    'custom_authenticators' => [
+                        'app.api_key_authenticator',
+                    ],
                     'json_login_ldap' => $baseLdapConfig,
                     'provider' => $baseLdapConfig['provider'],
                     'login_throttling' => [
@@ -294,7 +307,8 @@ return static function (ContainerConfigurator $containerConfig) {
             ['path' => '^/auth/logout', 'roles' => 'PUBLIC_ACCESS'],
             ['path' => '^/$', 'roles' => 'ROLE_USER'],
             ['path' => '^/private/media', 'roles' => 'ROLE_USER'],
-            ['path' => '^/api', 'roles' => 'PUBLIC_ACCESS'],
+        ['path' => '^/api/key/generate', 'roles' => 'ROLE_USER'],
+        ['path' => '^/api', 'roles' => 'PUBLIC_ACCESS'],
             ['path' => '^/api/graphql', 'roles' => 'PUBLIC_ACCESS'],
             ['path' => '^/api/graphql/graphiql*', 'roles' => 'PUBLIC_ACCESS'],
             ['path' => '^/', 'roles' => 'PUBLIC_ACCESS']

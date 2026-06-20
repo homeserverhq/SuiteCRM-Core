@@ -142,6 +142,28 @@ EditView_tabs.on('contentReady', function(e){
     </tr>
 </table>
 
+{literal}
+<script type="text/javascript">
+function generateApiKey() {
+    if (!confirm("Generate a new API key? The old key will stop working after you save your profile.")) return;
+    fetch("index.php?module=Users&action=GenerateApiKey")
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.api_key) {
+                var el = document.getElementById("api_key");
+                if (el) el.value = d.api_key;
+            }
+        });
+}
+function copyApiKey() {
+    var el = document.getElementById("api_key");
+    if (el && el.value) {
+        el.select();
+        document.execCommand("copy");
+    }
+}
+</script>
+{/literal}
 <div id="EditView_tabs" class="yui-navset">
     <ul class="yui-nav userprofile-nav">
         <li class="selected"><a id="tab1" href="#tab1"><em>{$MOD.LBL_USER_INFORMATION}</em></a></li>

@@ -138,6 +138,9 @@ import {TextTemplateDetailFieldModule} from "./texttemplate/templates/detail/tex
 import {TextTemplateDetailFieldComponent} from "./texttemplate/templates/detail/texttemplate.component";
 import {ImageListFieldComponent} from "./image/templates/list/image.component";
 import {ImageListFieldModule} from "./image/templates/list/image.module";
+import {ApikeyFieldModule} from "./apikey/apikey.module";
+import {ApikeyEditFieldComponent} from "./apikey/templates/edit/apikey.component";
+import {ApikeyDetailFieldComponent} from "./apikey/templates/detail/apikey.component";
 
 export const baseFieldModules = [
     VarcharDetailFieldModule,
@@ -195,7 +198,8 @@ export const baseFieldModules = [
     AttachmentEditFieldModule,
     AttachmentDetailFieldModule,
     AttachmentListFieldModule,
-    TextTemplateDetailFieldModule
+    TextTemplateDetailFieldModule,
+    ApikeyFieldModule
 ];
 export const baseFieldComponents = [
     VarcharDetailFieldComponent,
@@ -254,7 +258,9 @@ export const baseFieldComponents = [
     AttachmentEditFieldComponent,
     AttachmentDetailFieldComponent,
     AttachmentListFieldComponent,
-    TextTemplateDetailFieldComponent
+    TextTemplateDetailFieldComponent,
+    ApikeyEditFieldComponent,
+    ApikeyDetailFieldComponent
 ];
 
 export const baseViewFieldsMap: FieldComponentMap = {
@@ -356,5 +362,7 @@ export const baseViewFieldsMap: FieldComponentMap = {
     'html-squire.edit': SquireEditFieldComponent,
     'html-squire.detail': SquireDetailFieldComponent,
     'texttemplate.detail': TextTemplateDetailFieldComponent,
-    'texttemplate.list': TextTemplateDetailFieldComponent
+    'texttemplate.list': TextTemplateDetailFieldComponent,
+    'apikey.edit': ApikeyEditFieldComponent,
+    'apikey.detail': ApikeyDetailFieldComponent
 };
