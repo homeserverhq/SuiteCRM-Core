@@ -66,6 +66,7 @@ ADMIN_USER="${ADMIN_USERNAME}"
 ADMIN_PASS="${ADMIN_PASSWORD}"
 ADMIN_FIRST="${ADMIN_FIRST_NAME}"
 ADMIN_LAST="${ADMIN_LAST_NAME}"
+ADMIN_EMAIL="${SUITECRM_ADMIN_EMAIL_ADDRESS:-admin@example.com}"
 SITE_NAME="${SUITECRM_SITE_NAME:-SuiteCRM}"
 
 write_env_file() {
@@ -311,6 +312,25 @@ $stmt = $pdo->prepare("UPDATE users SET user_name = ?, first_name = ?, last_name
 $stmt->execute([getenv("ADMIN_USERNAME"), getenv("ADMIN_FIRST_NAME"), getenv("ADMIN_LAST_NAME"), $hash, "1"]);
 echo "  Admin credentials synchronized.\n";
 
+// Admin email address
+$email = getenv("ADMIN_EMAIL");
+$emailCaps = strtoupper($email);
+$eaStmt = $pdo->prepare("SELECT id FROM email_addresses WHERE email_address_caps = ? AND deleted = 0");
+$eaStmt->execute([$emailCaps]);
+$eaRow = $eaStmt->fetch(PDO::FETCH_ASSOC);
+if ($eaRow) {
+  $eaId = $eaRow["id"];
+} else {
+  $eaId = $pdo->query("SELECT UUID()")->fetchColumn();
+  $insStmt = $pdo->prepare("INSERT INTO email_addresses (id, email_address, email_address_caps, invalid_email, opt_out, date_created, date_modified, deleted) VALUES (?, ?, ?, 0, 0, NOW(), NOW(), 0)");
+  $insStmt->execute([$eaId, $email, $emailCaps]);
+}
+$pdo->prepare("UPDATE email_addr_bean_rel SET deleted = 1 WHERE bean_id = '1' AND bean_module = 'Users' AND deleted = 0")->execute();
+$relId = $pdo->query("SELECT UUID()")->fetchColumn();
+$relStmt = $pdo->prepare("INSERT INTO email_addr_bean_rel (id, bean_id, bean_module, email_address_id, primary_address, reply_to_address, date_created, date_modified, deleted) VALUES (?, '1', 'Users', ?, 1, 0, NOW(), NOW(), 0)");
+$relStmt->execute([$relId, $eaId]);
+echo "  Admin email set to $email.\n";
+
 // Company name
 $pdo->exec("DELETE FROM config WHERE category = \"system\" AND name = \"name\"");
 $stmt = $pdo->prepare("INSERT INTO config (category, name, value) VALUES (?, ?, ?)");
@@ -341,7 +361,7 @@ PHPEOF
 # Sync env vars to SuiteCRM config (admin credentials, company name, wizard skip)
 echo "Syncing env vars to SuiteCRM config..."
 export DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD
-export ADMIN_USERNAME ADMIN_PASSWORD ADMIN_FIRST_NAME ADMIN_LAST_NAME SITE_NAME SKIP_WIZARD TZ
+export ADMIN_USERNAME ADMIN_PASSWORD ADMIN_FIRST_NAME ADMIN_LAST_NAME ADMIN_EMAIL SITE_NAME SKIP_WIZARD TZ
 run_as_www_data "php /tmp/env_sync.php" 2>&1 || echo "  (env sync skipped - first install or DB not ready)"
 rm -f /tmp/env_sync.php
 echo "Env sync complete."
