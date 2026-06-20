@@ -125,11 +125,32 @@ run_as_www_data() {
 COMMAND="${1:-php-fpm}"
 case "$COMMAND" in
   cron|worker)
-    echo "${COMMAND} container detected. Skipping setup, starting ${COMMAND}..."
+    echo "${COMMAND} container detected. Waiting for requirements..."
     write_env_file ""
     if [ ! -f /var/www/html/public/legacy/config.php ] && [ -f "$SHARED_CONFIG" ]; then
       cp "$SHARED_CONFIG" /var/www/html/public/legacy/config.php
     fi
+
+    echo "Waiting for MariaDB at ${DB_HOST}:${DB_PORT}..."
+    while ! mysqladmin ping -h"${DB_HOST}" -P"${DB_PORT}" -u"${DB_USER}" -p"${DB_PASSWORD}" --skip-ssl --silent 2>/dev/null; do
+      sleep 1
+    done
+    echo "MariaDB is ready."
+
+    echo "Waiting for installation to complete..."
+    while [ ! -f "$MARKER_FILE" ] && [ ! -f /var/www/html/public/legacy/config.php ]; do
+      sleep 2
+    done
+    echo "Installation detected."
+
+    echo "Running doctrine migrations..."
+    run_as_www_data "cd /var/www/html && php bin/console doctrine:migrations:migrate --no-interaction" 2>&1 | grep -v -E 'already exists|SQLSTATE\[42S01\]' || true
+
+    echo "Clearing cache..."
+    run_as_www_data "cd /var/www/html && php bin/console cache:clear" 2>/dev/null || true
+    run_as_www_data "cd /var/www/html && php bin/console cache:warmup" 2>&1 || true
+
+    echo "Starting ${COMMAND}..."
     exec "/usr/local/bin/${COMMAND}.sh"
     ;;
 esac
